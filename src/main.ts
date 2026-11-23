@@ -1,114 +1,63 @@
-import {
-	Editor,
-	MarkdownView,
-	MarkdownFileInfo,
-	Modal,
-	Notice,
-	Plugin,
-} from 'obsidian';
-import {
-	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
-} from './settings';
 
-// Remember to rename these classes and interfaces!
+import { Plugin } from "obsidian";
 
-export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+import { DeutschAssistantModal } from "./ui/DeutschAssistantModal";
+import { DeutschAssistantSettingsTab } from "./settings/SettingsTab";
 
-	async onload() {
-		await this.loadSettings();
-
-		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (_evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status bar text');
-
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-modal-simple',
-			name: 'Open modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			},
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'replace-selected',
-			name: 'Replace selected content',
-			editorCallback: (
-				editor: Editor,
-				_ctx: MarkdownView | MarkdownFileInfo,
-			) => {
-				editor.replaceSelection('Sample editor command');
-			},
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-modal-complex',
-			name: 'Open modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView =
-					this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
-
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
-				return false;
-			},
-		});
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
-
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(activeDocument, 'click', (_evt: MouseEvent) => {
-			new Notice('Click');
-		});
-
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000),
-		);
-	}
-
-	onunload() {}
-
-	async loadSettings() {
-		this.settings = Object.assign(
-			{},
-			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
-		);
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+export interface DeutschAssistantSettings {
+  defaultDeck: string;
+  geminiApiKey: string;
 }
 
-class SampleModal extends Modal {
-	onOpen() {
-		const { contentEl } = this;
-		contentEl.setText('Woah!');
-	}
+const DEFAULT_SETTINGS: DeutschAssistantSettings = {
+  defaultDeck: "",
+  geminiApiKey: "",
+};
 
-	onClose() {
-		const { contentEl } = this;
-		contentEl.empty();
-	}
+export default class DeutschAssistantPlugin extends Plugin {
+  settings: DeutschAssistantSettings | undefined = DEFAULT_SETTINGS;
+
+  async onload(): Promise<void> {
+    await this.loadSettings();
+
+    this.addRibbonIcon(
+      "languages",
+      "Open Deutsch Assistant",
+      () => this.openAssistant(),
+    );
+
+    this.addCommand({
+      id: "open-deutsch-assistant",
+      name: "Open Deutsch Assistant",
+      callback: () => this.openAssistant(),
+    });
+
+    this.addSettingTab(
+      new DeutschAssistantSettingsTab(this.app, this),
+    );
+
+    console.log("Deutsch Assistant: Plugin loaded");
+  }
+
+  onunload(): void {
+    console.log("Deutsch Assistant: Plugin unloaded");
+  }
+
+  private openAssistant(): void {
+    new DeutschAssistantModal(this.app).open();
+  }
+
+  async loadSettings(): Promise<void> {
+    const savedSettings = await this.loadData();
+
+    this.settings = Object.assign(
+      {},
+      DEFAULT_SETTINGS,
+      savedSettings,
+    );
+  }
+
+  async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
+  }
 }
