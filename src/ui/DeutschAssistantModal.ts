@@ -1,16 +1,24 @@
 
 import { App, Modal } from "obsidian";
 import { ImageService } from "../services/ImageService";
+import { GeminiService } from "../services/GeminiService";
+import type { RecognizedWord } from "../services/GeminiService";
 
 export class DeutschAssistantModal extends Modal {
+  private readonly apiKey: string;
+
   private selectedFile: File | null = null;
   private previewUrl: string | null = null;
+  private isAnalyzing = false;
 
   private previewContainer: HTMLDivElement | null = null;
+  private resultsContainer: HTMLDivElement | null = null;
   private statusContainer: HTMLDivElement | null = null;
+  private analyzeButton: HTMLButtonElement | null = null;
 
-  constructor(app: App) {
+  constructor(app: App, apiKey: string) {
     super(app);
+    this.apiKey = apiKey;
   }
 
   onOpen(): void {
@@ -38,8 +46,23 @@ export class DeutschAssistantModal extends Modal {
       cls: "deutsch-assistant-status",
     });
 
+    this.resultsContainer = contentEl.createDiv({
+      cls: "deutsch-assistant-results",
+    });
+
     const footer = contentEl.createDiv({
       cls: "deutsch-assistant-footer",
+    });
+
+    this.analyzeButton = footer.createEl("button", {
+      text: "Analyze image",
+      cls: "mod-cta",
+    });
+
+    this.analyzeButton.disabled = true;
+
+    this.analyzeButton.addEventListener("click", () => {
+      void this.analyzeImage();
     });
 
     const closeButton = footer.createEl("button", {
@@ -100,7 +123,6 @@ export class DeutschAssistantModal extends Modal {
         this.handleFile(file);
       }
 
-      // Allows selecting the same file again.
       fileInput.value = "";
     });
 
@@ -143,7 +165,13 @@ export class DeutschAssistantModal extends Modal {
     this.selectedFile = file;
     this.previewUrl = URL.createObjectURL(file);
 
+    this.resultsContainer?.empty();
     this.renderPreview();
+
+    if (this.analyzeButton) {
+      this.analyzeButton.disabled = false;
+    }
+
     this.showStatus("Image successfully loaded.", "success");
   }
 
@@ -155,6 +183,7 @@ export class DeutschAssistantModal extends Modal {
     const container = this.previewContainer;
 
     container.empty();
+
     container.createEl("h3", {
       text: "Image preview",
     });
@@ -197,18 +226,151 @@ export class DeutschAssistantModal extends Modal {
 
     removeButton.addEventListener("click", () => {
       this.clearPreview();
+      this.resultsContainer?.empty();
+
+      if (this.analyzeButton) {
+        this.analyzeButton.disabled = true;
+      }
+
       this.showStatus("Image removed.", "success");
     });
   }
 
-  private clearPreview(): void {
-    if (this.previewUrl) {
-      URL.revokeObjectURL(this.previewUrl);
-      this.previewUrl = null;
+  private async analyzeImage(): Promise<void> {
+    if (!this.selectedFile || this.isAnalyzing) {
+      return;
     }
 
-    this.selectedFile = null;
-    this.previewContainer?.empty();
+    if (!this.apiKey.trim()) {
+      this.showStatus(
+        "Gemini API key is missing. Add it in Settings → Deutsch Assistant.",
+        "error",
+      );
+      return;
+    }
+
+    this.isAnalyzing = true;
+    this.setAnalyzeButtonState(true, "Analyzing...");
+
+    this.resultsContainer?.empty();
+    this.showStatus(
+      "Gemini is analyzing the image. Please wait...",
+      "success",
+    );
+
+    try {
+      const words = await GeminiService.analyzeImage(
+        this.selectedFile,
+        this.apiKey,
+      );
+
+      this.renderResults(words);
+
+      this.showStatus(
+        `Analysis complete. Found ${words.length} word(s).`,
+        "success",
+      );
+    } catch (error) {
+      console.error("Deutsch Assistant: Gemini analysis failed", error);
+
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An unknown error occurred.";
+
+      this.showStatus(`Analysis failed: ${message}`, "error");
+    } finally {
+      this.isAnalyzing = false;
+      this.setAnalyzeButtonState(false, "Analyze image");
+    }
+  }
+
+  private renderResults(words: RecognizedWord[]): void {
+    if (!this.resultsContainer) {
+      return;
+    }
+
+    const container = this.resultsContainer;
+    container.empty();
+
+    container.createEl("h3", {
+      text: "Recognized vocabulary",
+    });
+
+    if (words.length === 0) {
+      container.createEl("p", {
+        text: "No vocabulary was recognized in this image.",
+        cls: "deutsch-assistant-muted",
+      });
+
+      return;
+    }
+
+    words.forEach((word, index) => {
+      const card = container.createDiv({
+        cls: "deutsch-assistant-word-card",
+      });
+
+      const heading = card.createDiv({
+        cls: "deutsch-assistant-word-heading",
+      });
+
+      heading.createEl("strong", {
+        text: `${index + 1}. ${word.lemma}`,
+      });
+
+      heading.createEl("span", {
+        text: word.partOfSpeech,
+        cls: "deutsch-assistant-word-type",
+      });
+
+      const details = card.createDiv({
+        cls: "deutsch-assistant-word-details",
+      });
+
+      this.addWordDetail(details, "Original", word.original);
+      this.addWordDetail(details, "Forms", word.forms);
+      this.addWordDetail(details, "Translation", word.translation);
+      this.addWordDetail(details, "Context", word.context);
+
+      const confidence = Math.round(word.confidence * 100);
+
+      card.createEl("div", {
+        text: `Confidence: ${confidence}%`,
+        cls: "deutsch-assistant-word-confidence",
+      });
+    });
+  }
+
+  private addWordDetail(
+    container: HTMLElement,
+    label: string,
+    value: string,
+  ): void {
+    const row = container.createDiv({
+      cls: "deutsch-assistant-word-detail",
+    });
+
+    row.createEl("span", {
+      text: `${label}:`,
+      cls: "deutsch-assistant-word-detail-label",
+    });
+
+    row.createEl("span", {
+      text: value || "—",
+    });
+  }
+
+  private setAnalyzeButtonState(
+    disabled: boolean,
+    text: string,
+  ): void {
+    if (!this.analyzeButton) {
+      return;
+    }
+
+    this.analyzeButton.disabled = disabled;
+    this.analyzeButton.setText(text);
   }
 
   private showStatus(
@@ -220,12 +382,26 @@ export class DeutschAssistantModal extends Modal {
     }
 
     this.statusContainer.empty();
-
     this.statusContainer.setText(message);
+
+    this.statusContainer.removeClass(
+      "deutsch-assistant-status-success",
+      "deutsch-assistant-status-error",
+    );
 
     this.statusContainer.addClass(
       `deutsch-assistant-status-${type}`,
     );
+  }
+
+  private clearPreview(): void {
+    if (this.previewUrl) {
+      URL.revokeObjectURL(this.previewUrl);
+      this.previewUrl = null;
+    }
+
+    this.selectedFile = null;
+    this.previewContainer?.empty();
   }
 
   onClose(): void {

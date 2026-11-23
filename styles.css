@@ -104,5 +104,58 @@ If your plugin does not need CSS, delete this file.
 .deutsch-assistant-footer {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 24px;
+}
+
+.deutsch-assistant-results {
+  margin-top: 24px;
+}
+
+.deutsch-assistant-word-card {
+  padding: 14px;
+  margin-top: 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.deutsch-assistant-word-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.deutsch-assistant-word-heading strong {
+  font-size: 16px;
+}
+
+.deutsch-assistant-word-type {
+  color: var(--text-accent);
+  font-size: 12px;
+}
+
+.deutsch-assistant-word-details {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.deutsch-assistant-word-detail {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.deutsch-assistant-word-detail-label {
+  color: var(--text-muted);
+}
+
+.deutsch-assistant-word-confidence {
+  margin-top: 12px;
+  color: var(--text-faint);
+  font-size: 11px;
 }
