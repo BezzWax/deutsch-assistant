@@ -1,6 +1,3 @@
-/* eslint-disable eslint-comments/require-description */
-// eslint-disable-next-line eslint-comments/disable-enable-pair
-/* eslint-disable eslint-comments/no-restricted-disable */
 
 import { App, PluginSettingTab, Setting } from "obsidian";
 import DeutschAssistantPlugin from "../main";
@@ -18,7 +15,6 @@ export class DeutschAssistantSettingsTab extends PluginSettingTab {
 
     containerEl.empty();
 
-
     containerEl.createEl("h2", {
       text: "Deutsch Assistant Settings",
     });
@@ -28,10 +24,10 @@ export class DeutschAssistantSettingsTab extends PluginSettingTab {
       .setDesc("The Anki deck used for vocabulary imports.")
       .addText((text) =>
         text
-          .setPlaceholder("Deutsch::Wortschatz")
-          .setValue(this.plugin.settings?.defaultDeck ?? "")
+          .setPlaceholder("Enter Anki deck name")
+          .setValue(this.plugin.settings.defaultDeck)
           .onChange(async (value) => {
-            this.plugin.settings!.defaultDeck = value;
+            this.plugin.settings.defaultDeck = value;
             await this.plugin.saveSettings();
           }),
       );
@@ -44,9 +40,9 @@ export class DeutschAssistantSettingsTab extends PluginSettingTab {
 
         text
           .setPlaceholder("Enter your API key")
-          .setValue(this.plugin.settings?.geminiApiKey ?? "")
+          .setValue(this.plugin.settings.geminiApiKey)
           .onChange(async (value) => {
-            this.plugin.settings!.geminiApiKey = value;
+            this.plugin.settings.geminiApiKey = value;
             await this.plugin.saveSettings();
           });
       });

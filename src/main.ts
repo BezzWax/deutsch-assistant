@@ -1,7 +1,8 @@
-import { Plugin } from 'obsidian';
+import { Notice, Plugin } from 'obsidian';
 
 import { DeutschAssistantModal } from './ui/DeutschAssistantModal';
 import { DeutschAssistantSettingsTab } from './settings/SettingsTab';
+import { AnkiService } from './services/AnkiService';
 
 export interface DeutschAssistantSettings {
 	defaultDeck: string;
@@ -14,7 +15,7 @@ const DEFAULT_SETTINGS: DeutschAssistantSettings = {
 };
 
 export default class DeutschAssistantPlugin extends Plugin {
-	settings: DeutschAssistantSettings | undefined = DEFAULT_SETTINGS;
+	settings: DeutschAssistantSettings = DEFAULT_SETTINGS;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -29,6 +30,34 @@ export default class DeutschAssistantPlugin extends Plugin {
 			callback: () => this.openAssistant(),
 		});
 
+		this.addCommand({
+			id: 'test-anki-connection',
+			name: 'Test Anki connection',
+			callback: async () => {
+				try {
+					const version = await AnkiService.checkConnection();
+					const decks = await AnkiService.getDeckNames();
+					const models = await AnkiService.getModelNames();
+
+					console.log('AnkiConnect version:', version);
+					console.log('Anki decks:', decks);
+					console.log('Anki note types:', models);
+
+					new Notice(
+						`Connected to AnkiConnect! Found ${decks.length} decks and ${models.length} note types.`,
+					);
+				} catch (error) {
+					console.error('Anki connection error:', error);
+
+					new Notice(
+						error instanceof Error
+							? error.message
+							: 'Anki connection failed.',
+					);
+				}
+			},
+		});
+
 		this.addSettingTab(new DeutschAssistantSettingsTab(this.app, this));
 
 		console.log('Deutsch Assistant: Plugin loaded');
@@ -39,7 +68,7 @@ export default class DeutschAssistantPlugin extends Plugin {
 	}
 
 	private openAssistant(): void {
-		new DeutschAssistantModal(this.app, this.settings?.geminiApiKey ?? '').open();
+		new DeutschAssistantModal(this.app, this.settings.geminiApiKey).open();
 	}
 
 	async loadSettings(): Promise<void> {

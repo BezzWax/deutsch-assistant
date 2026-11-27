@@ -112,22 +112,6 @@ If your plugin does not need CSS, delete this file.
   margin-top: 24px;
 }
 
-.deutsch-assistant-word-card {
-  padding: 14px;
-  margin-top: 12px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 10px;
-  background: var(--background-secondary);
-}
-
-.deutsch-assistant-word-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
 .deutsch-assistant-word-heading strong {
   font-size: 16px;
 }
@@ -154,8 +138,74 @@ If your plugin does not need CSS, delete this file.
   color: var(--text-muted);
 }
 
+.deutsch-assistant-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.deutsch-assistant-results-header h3 {
+  margin: 0;
+}
+
+.deutsch-assistant-word-card {
+  padding: 16px;
+  margin-top: 14px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  background: var(--background-secondary);
+}
+
+.deutsch-assistant-word-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.deutsch-assistant-remove-word {
+  color: var(--text-error);
+}
+
+.deutsch-assistant-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.deutsch-assistant-editor-field label {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.deutsch-assistant-editor-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 10px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.deutsch-assistant-editor-input:focus {
+  border-color: var(--interactive-accent);
+  outline: none;
+}
+
+textarea.deutsch-assistant-editor-input {
+  resize: vertical;
+  min-height: 65px;
+}
+
 .deutsch-assistant-word-confidence {
-  margin-top: 12px;
+  margin-top: 14px;
   color: var(--text-faint);
   font-size: 11px;
 }

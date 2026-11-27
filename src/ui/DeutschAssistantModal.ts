@@ -3,13 +3,19 @@ import { App, Modal } from "obsidian";
 import { ImageService } from "../services/ImageService";
 import { GeminiService } from "../services/GeminiService";
 import type { RecognizedWord } from "../services/GeminiService";
+import { AnkiService } from "../services/AnkiService";
+import type { AnkiNote } from "../services/AnkiService";
 
 export class DeutschAssistantModal extends Modal {
   private readonly apiKey: string;
+  private recognizedWords: RecognizedWord[] = [];
 
   private selectedFile: File | null = null;
   private previewUrl: string | null = null;
   private isAnalyzing = false;
+  private isImporting = false;
+  private compatibleModelNames: string[] = [];
+  private selectedModelName = "";
 
   private previewContainer: HTMLDivElement | null = null;
   private resultsContainer: HTMLDivElement | null = null;
@@ -166,6 +172,9 @@ export class DeutschAssistantModal extends Modal {
     this.previewUrl = URL.createObjectURL(file);
 
     this.resultsContainer?.empty();
+    this.recognizedWords = [];
+    this.compatibleModelNames = [];
+    this.selectedModelName = "";
     this.renderPreview();
 
     if (this.analyzeButton) {
@@ -227,6 +236,9 @@ export class DeutschAssistantModal extends Modal {
     removeButton.addEventListener("click", () => {
       this.clearPreview();
       this.resultsContainer?.empty();
+      this.recognizedWords = [];
+      this.compatibleModelNames = [];
+      this.selectedModelName = "";
 
       if (this.analyzeButton) {
         this.analyzeButton.disabled = true;
@@ -264,7 +276,8 @@ export class DeutschAssistantModal extends Modal {
         this.apiKey,
       );
 
-      this.renderResults(words);
+      this.recognizedWords = words;
+      this.renderResults();
 
       this.showStatus(
         `Analysis complete. Found ${words.length} word(s).`,
@@ -285,7 +298,7 @@ export class DeutschAssistantModal extends Modal {
     }
   }
 
-  private renderResults(words: RecognizedWord[]): void {
+  private renderResults(): void {
     if (!this.resultsContainer) {
       return;
     }
@@ -293,20 +306,75 @@ export class DeutschAssistantModal extends Modal {
     const container = this.resultsContainer;
     container.empty();
 
-    container.createEl("h3", {
-      text: "Recognized vocabulary",
+    const header = container.createDiv({
+      cls: "deutsch-assistant-results-header",
     });
 
-    if (words.length === 0) {
+    header.createEl("h3", {
+      text: `Vocabulary editor (${this.recognizedWords.length})`,
+    });
+
+    const addButton = header.createEl("button", {
+      text: "+ Add word",
+    });
+
+    addButton.addEventListener("click", () => {
+      this.recognizedWords.push({
+        original: "",
+        lemma: "",
+        partOfSpeech: "",
+        forms: "",
+        translation: "",
+        context: "",
+        confidence: 0,
+      });
+
+      this.renderResults();
+    });
+
+    const importButton = header.createEl("button", {
+      text: "Import to Anki",
+      cls: "mod-cta",
+    });
+
+    importButton.disabled =
+      this.recognizedWords.length === 0 || this.isImporting;
+
+    importButton.addEventListener("click", () => {
+      void this.importToAnki();
+    });
+
+    if (this.compatibleModelNames.length > 1) {
+      const modelSelect = header.createEl("select", {
+        cls: "deutsch-assistant-model-select",
+      });
+
+      for (const modelName of this.compatibleModelNames) {
+        const option = document.createElement("option");
+        option.value = modelName;
+        option.textContent = modelName;
+        modelSelect.appendChild(option);
+      }
+
+      const firstModel = this.compatibleModelNames[0] ?? "";
+      modelSelect.value = this.selectedModelName ?? firstModel;
+      this.selectedModelName = modelSelect.value;
+
+      modelSelect.addEventListener("change", () => {
+        this.selectedModelName = modelSelect.value;
+      });
+    }
+
+    if (this.recognizedWords.length === 0) {
       container.createEl("p", {
-        text: "No vocabulary was recognized in this image.",
+        text: "No words recognized. You can add a word manually.",
         cls: "deutsch-assistant-muted",
       });
 
       return;
     }
 
-    words.forEach((word, index) => {
+    this.recognizedWords.forEach((word, index) => {
       const card = container.createDiv({
         cls: "deutsch-assistant-word-card",
       });
@@ -316,49 +384,195 @@ export class DeutschAssistantModal extends Modal {
       });
 
       heading.createEl("strong", {
-        text: `${index + 1}. ${word.lemma}`,
+        text: `Word ${index + 1}`,
       });
 
-      heading.createEl("span", {
-        text: word.partOfSpeech,
-        cls: "deutsch-assistant-word-type",
+      const removeButton = heading.createEl("button", {
+        text: "Remove",
+        cls: "deutsch-assistant-remove-word",
       });
 
-      const details = card.createDiv({
-        cls: "deutsch-assistant-word-details",
+      removeButton.addEventListener("click", () => {
+        this.recognizedWords.splice(index, 1);
+        this.renderResults();
       });
 
-      this.addWordDetail(details, "Original", word.original);
-      this.addWordDetail(details, "Forms", word.forms);
-      this.addWordDetail(details, "Translation", word.translation);
-      this.addWordDetail(details, "Context", word.context);
+      this.createEditableField(card, index, "original", "Original word");
+      this.createEditableField(card, index, "lemma", "Lemma");
+      this.createEditableField(card, index, "partOfSpeech", "Part of speech");
+      this.createEditableField(card, index, "forms", "Grammatical forms");
+      this.createEditableField(card, index, "translation", "Translation");
+      this.createEditableField(card, index, "context", "Context", true);
 
       const confidence = Math.round(word.confidence * 100);
 
       card.createEl("div", {
-        text: `Confidence: ${confidence}%`,
+        text: word.confidence === 0
+          ? "Manual entry"
+          : `AI confidence: ${confidence}%`,
         cls: "deutsch-assistant-word-confidence",
       });
     });
   }
 
-  private addWordDetail(
+  private async importToAnki(): Promise<void> {
+    if (this.isImporting) {
+      return;
+    }
+
+    const invalidWords = this.recognizedWords
+      .map((word, index) => ({
+        index: index + 1,
+        missingLemma: !word.lemma.trim(),
+        missingTranslation: !word.translation.trim(),
+      }))
+      .filter((item) => item.missingLemma || item.missingTranslation);
+
+    if (invalidWords.length > 0) {
+      const details = invalidWords
+        .map((item) => {
+          const missing = [
+            item.missingLemma ? "Lemma" : "",
+            item.missingTranslation ? "Translation" : "",
+          ].filter(Boolean).join(" and ");
+
+          return `Word ${item.index}: missing ${missing}`;
+        })
+        .join("; ");
+
+      this.showStatus(
+        `Please complete required fields before importing. ${details}`,
+        "error",
+      );
+      return;
+    }
+
+    this.isImporting = true;
+    this.showStatus("Preparing notes for Anki...", "success");
+
+    try {
+      if (this.compatibleModelNames.length === 0) {
+        const modelNames = await AnkiService.getModelNames();
+        const compatibleModels: string[] = [];
+
+        for (const modelName of modelNames) {
+          const fields = await AnkiService.getModelFieldNames(modelName);
+
+          if (
+            ["Front", "Forms", "Back"].every((requiredField) =>
+              fields.includes(requiredField),
+            )
+          ) {
+            compatibleModels.push(modelName);
+          }
+        }
+
+        this.compatibleModelNames = compatibleModels;
+
+        if (compatibleModels.length === 0) {
+          throw new Error(
+            'No Anki note type has all required fields: "Front", "Forms", and "Back".',
+          );
+        }
+
+        const firstCompatibleModel = compatibleModels[0];
+
+        if (!firstCompatibleModel) {
+          throw new Error("No compatible Anki note type was found.");
+        }
+
+        if (compatibleModels.length > 1) {
+          this.selectedModelName = firstCompatibleModel;
+          this.renderResults();
+          this.showStatus(
+            "Several compatible note types were found. Choose one and click Import to Anki again.",
+            "success",
+          );
+          return;
+        }
+
+        this.selectedModelName = firstCompatibleModel;
+      }
+
+      const modelName = this.selectedModelName || this.compatibleModelNames[0];
+
+      if (!modelName) {
+        throw new Error("An Anki note type has not been selected.");
+      }
+
+      const notes: AnkiNote[] = this.recognizedWords.map((word) => ({
+        deckName: "German vocabulary",
+        modelName,
+        fields: {
+          Front: word.lemma.trim(),
+          Forms: word.forms.trim(),
+          Back: word.translation.trim(),
+        },
+        tags: ["deutsch-assistant"],
+      }));
+
+      const result = await AnkiService.importNotes(notes);
+
+      this.showStatus(
+        `Anki import complete: ${result.added} added, ${result.failed} skipped.`,
+        result.added > 0 ? "success" : "error",
+      );
+
+      console.log("Deutsch Assistant: Anki import result", result);
+    } catch (error) {
+      console.error("Deutsch Assistant: Anki import failed", error);
+
+      const message =
+        error instanceof Error ? error.message : "Unknown Anki error.";
+
+      this.showStatus(`Anki import failed: ${message}`, "error");
+    } finally {
+      this.isImporting = false;
+      const button = this.resultsContainer?.querySelector<HTMLButtonElement>(
+        ".deutsch-assistant-results-header button.mod-cta",
+      );
+
+      if (button) {
+        button.disabled = this.recognizedWords.length === 0;
+      }
+    }
+  }
+
+  private createEditableField(
     container: HTMLElement,
+    wordIndex: number,
+    field: Exclude<keyof RecognizedWord, "confidence">,
     label: string,
-    value: string,
+    multiline = false,
   ): void {
-    const row = container.createDiv({
-      cls: "deutsch-assistant-word-detail",
+    const wrapper = container.createDiv({
+      cls: "deutsch-assistant-editor-field",
     });
 
-    row.createEl("span", {
-      text: `${label}:`,
-      cls: "deutsch-assistant-word-detail-label",
+    wrapper.createEl("label", {
+      text: label,
     });
 
-    row.createEl("span", {
-      text: value || "—",
+    const input = multiline
+      ? document.createElement("textarea")
+      : document.createElement("input");
+
+    input.className = "deutsch-assistant-editor-input";
+    input.value = this.recognizedWords?.[wordIndex]?.[field] ?? "";
+
+    if (input instanceof HTMLTextAreaElement) {
+      input.rows = 3;
+    }
+
+    input.addEventListener("input", () => {
+      const word = this.recognizedWords[wordIndex];
+
+      if (word) {
+        word[field] = input.value;
+      }
     });
+
+    wrapper.appendChild(input);
   }
 
   private setAnalyzeButtonState(
@@ -406,6 +620,9 @@ export class DeutschAssistantModal extends Modal {
 
   onClose(): void {
     this.clearPreview();
+    this.recognizedWords = [];
+    this.compatibleModelNames = [];
+    this.selectedModelName = "";
     this.contentEl.empty();
   }
 }
